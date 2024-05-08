@@ -38,7 +38,6 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 		DeliverPolicy: jetstream.DeliverByStartSequencePolicy,
 		OptStartSeq:   1,
 		Name:          queue,
-		AckWait:       2,
 	}
 	consumer, err := stream.CreateConsumer(context.TODO(), cfg)
 	if err != nil {
