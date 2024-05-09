@@ -9,7 +9,7 @@ Prerequisites
 # Getting Started
 Import the library in your Go code:
 
-    import "github.com/vedadiyan/natsch
+    import "github.com/vedadiyan/natsch"
 
 Connect to the NATS server and create a new Conn instance:
 
