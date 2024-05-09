@@ -35,6 +35,11 @@ type (
 		Deadline int64
 		Id       string
 	}
+	ConsumerContext struct {
+		jetstream.ConsumeContext
+		stopped  bool
+		draining bool
+	}
 )
 
 const (
@@ -55,6 +60,30 @@ func (consumerErr ConsumerErr) Error() string {
 
 func (messageErr MessageErr) Error() string {
 	return string(messageErr)
+}
+
+func NewConsumerContext(consumerContext jetstream.ConsumeContext) *ConsumerContext {
+	newConsumerContext := ConsumerContext{}
+	newConsumerContext.ConsumeContext = consumerContext
+	return &newConsumerContext
+}
+
+func (consumerContext *ConsumerContext) Stop() {
+	consumerContext.stopped = true
+	consumerContext.ConsumeContext.Stop()
+}
+
+func (consumerContext *ConsumerContext) Drain() {
+	consumerContext.draining = true
+	consumerContext.ConsumeContext.Drain()
+}
+
+func (consumerContext *ConsumerContext) Stopped() bool {
+	return consumerContext.stopped
+}
+
+func (consumerContext *ConsumerContext) Draining() bool {
+	return consumerContext.draining
 }
 
 func NewTagger(conn *Conn, queue string, consumerId string) (*Tagger, error) {
@@ -137,17 +166,13 @@ func (tagger *Tagger) Sync(stream jetstream.Stream) error {
 	return nil
 }
 
-func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg)) (jetstream.ConsumeContext, error) {
+func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg)) (*ConsumerContext, error) {
 	stream, err := GetOrCreateStream(conn, subject)
 	if err != nil {
 		return nil, err
 	}
 	id := uuid.New().String()
 	tagger, err := NewTagger(conn, queue, id)
-	if err != nil {
-		return nil, err
-	}
-	err = tagger.Sync(stream)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +194,7 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 			return nil, err
 		}
 	}
-	return consumer.Consume(func(msg jetstream.Msg) {
+	consumerContext, err := consumer.Consume(func(msg jetstream.Msg) {
 		err := msg.Ack()
 		if err != nil {
 			log.Println(err)
@@ -203,6 +228,20 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 			}
 		}()
 	})
+	if err != nil {
+		return nil, err
+	}
+	localConsumerContext := NewConsumerContext(consumerContext)
+	go func() {
+		for !localConsumerContext.Stopped() {
+			err = tagger.Sync(stream)
+			if err != nil {
+				log.Println(err)
+			}
+			<-time.After(cfg.AckWait)
+		}
+	}()
+	return localConsumerContext, nil
 }
 
 func (conn *Conn) PublishSch(subject string, deadline time.Time, data []byte) error {
