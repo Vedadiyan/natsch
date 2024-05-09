@@ -130,6 +130,9 @@ func (tagger *Tagger) UnTag(msg jetstream.Msg) error {
 func (tagger *Tagger) Sync(stream jetstream.Stream) error {
 	keys, err := tagger.kv.Keys(context.TODO())
 	if err != nil {
+		if errors.Is(err, jetstream.ErrNoKeysFound) {
+			return nil
+		}
 		return err
 	}
 	consumers := make(map[string]bool)
@@ -382,9 +385,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	// err = schConn.PublishSch("test", time.Now().Add(time.Second*1), []byte("OKK"))
-	// if err != nil {
-	// 	panic(err)
-	// }
+	err = schConn.PublishSch("test", time.Now().Add(time.Second*1), []byte("OKK"))
+	if err != nil {
+		panic(err)
+	}
 	fmt.Scanln()
 }
