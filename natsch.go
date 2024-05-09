@@ -120,15 +120,6 @@ func (tagger *Tagger) Sync(stream jetstream.Stream) error {
 		}
 		return err
 	}
-	consumers := make(map[string]bool)
-	consumerLister := stream.ListConsumers(context.TODO())
-	for consumer := range consumerLister.Info() {
-		id, ok := consumer.Config.Metadata[METADATA_ID]
-		if !ok {
-			return ERR_CONSUMER_INVALID
-		}
-		consumers[id] = true
-	}
 	for _, key := range keys {
 		seqNumber, err := strconv.ParseUint(key, 10, 64)
 		if err != nil {
@@ -136,10 +127,10 @@ func (tagger *Tagger) Sync(stream jetstream.Stream) error {
 		}
 		value, err := tagger.kv.Get(context.TODO(), key)
 		if err != nil {
-			return err
+			continue
 		}
-		_, ok := consumers[string(value.Value())]
-		if ok {
+		_, err = tagger.conn.Request(string(value.Value()), nil, time.Second*10)
+		if err == nil {
 			continue
 		}
 		msg, err := stream.GetMsg(context.TODO(), seqNumber)
@@ -158,6 +149,7 @@ func (tagger *Tagger) Sync(stream jetstream.Stream) error {
 		if err != nil {
 			return err
 		}
+		fmt.Println("REPUB")
 		err = tagger.UnTag(seqNumber)
 		if err != nil {
 			return err
@@ -180,9 +172,7 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 		DeliverPolicy: jetstream.DeliverByStartSequencePolicy,
 		OptStartSeq:   1,
 		Name:          queue,
-		Metadata: map[string]string{
-			METADATA_ID: id,
-		},
+		AckWait:       time.Second * 10,
 	}
 	consumer, err := stream.CreateConsumer(context.TODO(), cfg)
 	if err != nil {
@@ -194,37 +184,43 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 			return nil, err
 		}
 	}
+	conn.Subscribe(id, func(msg *nats.Msg) {
+		msg.Respond(nil)
+	})
 	consumerContext, err := consumer.Consume(func(msg jetstream.Msg) {
 		err := msg.Ack()
 		if err != nil {
-			log.Println(err)
+			log.Println("ack:", err)
 		}
 		metadata, err := msg.Metadata()
 		if err != nil {
-			log.Println(err)
+			log.Println("metadata:", err)
 			return
 		}
 		err = tagger.Tag(metadata.Sequence.Stream)
 		if err != nil {
-			log.Println(err)
+			log.Println("tag:", err)
 		}
 		newMsg, err := WrapJetStreamMessage(msg)
 		if err != nil {
-			log.Println(err)
+			log.Println("message wrap:", err)
 			return
 		}
 		duration := time.Until(time.UnixMicro(newMsg.Deadline))
 		go func() {
 			defer guard()
+
+			fmt.Println("HANDLING")
+
 			<-time.After(duration)
 			cb(newMsg)
-			err := tagger.UnTag(metadata.Sequence.Stream)
-			if err != nil {
-				log.Println(err)
-			}
 			err = stream.DeleteMsg(context.TODO(), metadata.Sequence.Stream)
 			if err != nil {
-				log.Println(err)
+				log.Println("delete key:", err)
+			}
+			err := tagger.UnTag(metadata.Sequence.Stream)
+			if err != nil {
+				log.Println("untag:", err)
 			}
 		}()
 	})
@@ -236,7 +232,7 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 		for !localConsumerContext.Stopped() {
 			err = tagger.Sync(stream)
 			if err != nil {
-				log.Println(err)
+				log.Println("sync:", err)
 			}
 			<-time.After(cfg.AckWait)
 		}
@@ -353,6 +349,6 @@ func New(conn *nats.Conn) (*Conn, error) {
 
 func guard() {
 	if r := recover(); r != nil {
-		log.Println(r)
+		log.Println("guarded:", r)
 	}
 }
