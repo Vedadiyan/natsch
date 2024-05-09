@@ -149,7 +149,6 @@ func (tagger *Tagger) Sync(stream jetstream.Stream) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println("REPUB")
 		err = tagger.UnTag(seqNumber)
 		if err != nil {
 			return err
@@ -169,10 +168,8 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 		return nil, err
 	}
 	cfg := jetstream.ConsumerConfig{
-		DeliverPolicy: jetstream.DeliverByStartSequencePolicy,
-		OptStartSeq:   1,
-		Name:          queue,
-		AckWait:       time.Second * 10,
+		Name:    queue,
+		AckWait: time.Second * 10,
 	}
 	consumer, err := stream.CreateConsumer(context.TODO(), cfg)
 	if err != nil {
@@ -209,9 +206,6 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 		duration := time.Until(time.UnixMicro(newMsg.Deadline))
 		go func() {
 			defer guard()
-
-			fmt.Println("HANDLING")
-
 			<-time.After(duration)
 			cb(newMsg)
 			err = stream.DeleteMsg(context.TODO(), metadata.Sequence.Stream)
@@ -351,4 +345,32 @@ func guard() {
 	if r := recover(); r != nil {
 		log.Println("guarded:", r)
 	}
+}
+
+func main() {
+	conn, err := nats.Connect("nats://127.0.0.1:4222")
+	if err != nil {
+		panic(err)
+	}
+	schConn, err := New(conn)
+	if err != nil {
+		panic(err)
+	}
+	_, err = schConn.QueueSubscribeSch("test", "test", func(m *Msg) {
+		fmt.Println(string(m.Data), 1)
+	})
+	if err != nil {
+		panic(err)
+	}
+	_, err = schConn.QueueSubscribeSch("test", "test", func(m *Msg) {
+		fmt.Println(string(m.Data), 2)
+	})
+	if err != nil {
+		panic(err)
+	}
+	err = schConn.PublishSch("test", time.Now().Add(time.Second*10), []byte("OKK"))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Scanln()
 }
