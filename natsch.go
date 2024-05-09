@@ -150,15 +150,19 @@ func (tagger *Tagger) Sync(stream jetstream.Stream) error {
 		if err != nil {
 			return err
 		}
+
 	REPEAT:
-		err = tagger.locker.Lock(seqNumber, tagger.id, consumers)
-		if err != nil {
-			if errors.Is(err, LOCK_UNATTENDED) {
-				tagger.locker.Unlock(seqNumber)
-				goto REPEAT
+		{
+			err = tagger.locker.Lock(seqNumber, tagger.id, consumers)
+			if err != nil {
+				if errors.Is(err, LOCK_UNATTENDED) {
+					tagger.locker.Unlock(seqNumber)
+					goto REPEAT
+				}
+				continue
 			}
-			continue
 		}
+
 		_, ok := consumers[string(value.Value())]
 		if ok {
 			continue
