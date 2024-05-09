@@ -164,7 +164,7 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 			return nil, err
 		}
 	}
-	consumeContext, err := consumer.Consume(func(msg jetstream.Msg) {
+	return consumer.Consume(func(msg jetstream.Msg) {
 		err := msg.Ack()
 		if err != nil {
 			log.Println(err)
@@ -198,10 +198,6 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 			}
 		}()
 	})
-	if err != nil {
-		return nil, err
-	}
-	return consumeContext, nil
 }
 
 func (conn *Conn) PublishSch(subject string, deadline time.Time, data []byte) error {
