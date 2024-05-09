@@ -1,5 +1,6 @@
 # Introduction
 This library is built on top of NATS JetStream and provides a way to publish delayed messages with self-recovery features. If a consumer crashes while processing a message, the message will be redelivered to another consumer, ensuring that no messages are lost.
+
 Prerequisites
 
 1. Go programming language installed
