@@ -38,9 +38,9 @@ type (
 )
 
 const (
-	CONSUMER_INVALID = ConsumerErr("consumer is not valid")
+	ERR_CONSUMER_INVALID = ConsumerErr("consumer is not valid")
 
-	MESSAGE_DEADLINE_NOT_FOUND = MessageErr("deadline not found")
+	ERR_MESSAGE_DEADLINE_NOT_FOUND = MessageErr("deadline not found")
 
 	HEADER_DEADLINE = "deadline"
 
@@ -96,7 +96,7 @@ func (tagger *Tagger) Sync(stream jetstream.Stream) error {
 	for consumer := range consumerLister.Info() {
 		id, ok := consumer.Config.Metadata[METADATA_ID]
 		if !ok {
-			return CONSUMER_INVALID
+			return ERR_CONSUMER_INVALID
 		}
 		consumers[id] = true
 	}
@@ -272,7 +272,7 @@ func WrapRawStreamingMessage(rawStreamingMsg *jetstream.RawStreamMsg) (*Msg, err
 	msg.Data = rawStreamingMsg.Data
 	deadline := rawStreamingMsg.Header.Get(HEADER_DEADLINE)
 	if deadline == "" {
-		return nil, MESSAGE_DEADLINE_NOT_FOUND
+		return nil, ERR_MESSAGE_DEADLINE_NOT_FOUND
 	}
 	deadlineInt64, err := strconv.ParseInt(deadline, 10, 64)
 	if err != nil {
@@ -290,7 +290,7 @@ func WrapJetStreamMessage(natsMsg jetstream.Msg) (*Msg, error) {
 	msg.Data = natsMsg.Data()
 	deadline := natsMsg.Headers().Get(HEADER_DEADLINE)
 	if deadline == "" {
-		return nil, MESSAGE_DEADLINE_NOT_FOUND
+		return nil, ERR_MESSAGE_DEADLINE_NOT_FOUND
 	}
 	deadlineInt64, err := strconv.ParseInt(deadline, 10, 64)
 	if err != nil {
