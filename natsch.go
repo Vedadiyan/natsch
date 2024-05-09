@@ -312,37 +312,3 @@ func guard() {
 		log.Println(r)
 	}
 }
-
-func main() {
-	conn, err := nats.Connect("nats://127.0.0.1:4222")
-	if err != nil {
-		panic(err)
-	}
-	schConn, err := New(conn)
-	if err != nil {
-		panic(err)
-	}
-	go func() {
-		_, err := schConn.QueueSubscribeSch("test", "test", func(m *Msg) {
-			fmt.Println(string(m.Data), 1)
-		})
-		if err != nil {
-			panic(err)
-		}
-	}()
-	go func() {
-		_, err := schConn.QueueSubscribeSch("test", "test", func(m *Msg) {
-			fmt.Println(string(m.Data), 2)
-		})
-		if err != nil {
-			panic(err)
-		}
-	}()
-
-	err = schConn.PublishSch("test", time.Now().Add(time.Second*10), []byte(time.Now().String()))
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("started")
-	fmt.Scanln()
-}
