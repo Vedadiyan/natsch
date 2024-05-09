@@ -104,7 +104,6 @@ func (tagger *Tagger) Sync(stream jetstream.Stream) error {
 		if err != nil {
 			return err
 		}
-
 		_, ok := consumers[string(value.Value())]
 		if ok {
 			continue
