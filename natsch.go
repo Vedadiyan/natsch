@@ -17,6 +17,7 @@ import (
 
 type (
 	ConsumerErr string
+	MessageErr  string
 	Conn        struct {
 		*nats.Conn
 		jetstream.JetStream
@@ -38,15 +39,27 @@ type (
 
 const (
 	CONSUMER_INVALID = ConsumerErr("consumer is not valid")
+
+	MESSAGE_DEADLINE_NOT_FOUND = MessageErr("deadline not found")
+
+	HEADER_DEADLINE = "deadline"
+
+	METADATA_ID = "id"
+
+	SUFFIX_TAGS = "TAGS"
 )
 
 func (consumerErr ConsumerErr) Error() string {
 	return string(consumerErr)
 }
 
+func (messageErr MessageErr) Error() string {
+	return string(messageErr)
+}
+
 func NewTagger(conn *Conn, queue string, consumerId string) (*Tagger, error) {
 	cfg := jetstream.KeyValueConfig{
-		Bucket: fmt.Sprintf("%sTAGS", strings.ToUpper(queue)),
+		Bucket: fmt.Sprintf("%s%s", strings.ToUpper(queue), SUFFIX_TAGS),
 	}
 	kv, err := conn.JetStream.CreateOrUpdateKeyValue(context.TODO(), cfg)
 	if err != nil {
@@ -81,7 +94,7 @@ func (tagger *Tagger) Sync(stream jetstream.Stream) error {
 	consumers := make(map[string]bool)
 	consumerLister := stream.ListConsumers(context.TODO())
 	for consumer := range consumerLister.Info() {
-		id, ok := consumer.Config.Metadata["id"]
+		id, ok := consumer.Config.Metadata[METADATA_ID]
 		if !ok {
 			return CONSUMER_INVALID
 		}
@@ -143,7 +156,7 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 		OptStartSeq:   1,
 		Name:          queue,
 		Metadata: map[string]string{
-			"id": id,
+			METADATA_ID: id,
 		},
 	}
 	consumer, err := stream.CreateConsumer(context.TODO(), cfg)
@@ -208,7 +221,7 @@ func (conn *Conn) PublishMsgSch(msg *Msg) error {
 	if msg.Msg.Header == nil {
 		msg.Msg.Header = nats.Header{}
 	}
-	msg.Msg.Header.Set("deadline", fmt.Sprintf("%d", msg.Deadline))
+	msg.Msg.Header.Set(HEADER_DEADLINE, fmt.Sprintf("%d", msg.Deadline))
 	_, err = conn.JetStream.PublishMsg(context.TODO(), msg.Msg)
 	return err
 }
@@ -257,9 +270,9 @@ func WrapRawStreamingMessage(rawStreamingMsg *jetstream.RawStreamMsg) (*Msg, err
 	msg.Subject = rawStreamingMsg.Subject
 	msg.Header = rawStreamingMsg.Header
 	msg.Data = rawStreamingMsg.Data
-	deadline := rawStreamingMsg.Header.Get("deadline")
+	deadline := rawStreamingMsg.Header.Get(HEADER_DEADLINE)
 	if deadline == "" {
-		return nil, fmt.Errorf("deadline not found")
+		return nil, MESSAGE_DEADLINE_NOT_FOUND
 	}
 	deadlineInt64, err := strconv.ParseInt(deadline, 10, 64)
 	if err != nil {
@@ -275,9 +288,9 @@ func WrapJetStreamMessage(natsMsg jetstream.Msg) (*Msg, error) {
 	msg.Header = natsMsg.Headers()
 	msg.Reply = natsMsg.Reply()
 	msg.Data = natsMsg.Data()
-	deadline := natsMsg.Headers().Get("deadline")
+	deadline := natsMsg.Headers().Get(HEADER_DEADLINE)
 	if deadline == "" {
-		return nil, fmt.Errorf("deadline not found")
+		return nil, MESSAGE_DEADLINE_NOT_FOUND
 	}
 	deadlineInt64, err := strconv.ParseInt(deadline, 10, 64)
 	if err != nil {
