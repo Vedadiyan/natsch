@@ -16,7 +16,6 @@ import (
 )
 
 type (
-	LockErr     string
 	ConsumerErr string
 	Conn        struct {
 		*nats.Conn
@@ -38,15 +37,8 @@ type (
 )
 
 const (
-	LOCK_IN_USE     = LockErr("lock is already in use")
-	LOCK_UNATTENDED = LockErr("lock is unattended")
-
 	CONSUMER_INVALID = ConsumerErr("consumer is not valid")
 )
-
-func (lockErr LockErr) Error() string {
-	return string(lockErr)
-}
 
 func (consumerErr ConsumerErr) Error() string {
 	return string(consumerErr)
