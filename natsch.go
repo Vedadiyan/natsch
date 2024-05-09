@@ -223,7 +223,7 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 	}
 	localConsumerContext := NewConsumerContext(consumerContext)
 	go func() {
-		for !localConsumerContext.Stopped() {
+		for !localConsumerContext.Stopped() && !localConsumerContext.Draining() {
 			err = tagger.Sync(stream)
 			if err != nil {
 				log.Println("sync:", err)
