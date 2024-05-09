@@ -199,7 +199,7 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 		}()
 	})
 	if err != nil {
-		log.Println(err)
+		return nil, err
 	}
 	return consumeContext, nil
 }
