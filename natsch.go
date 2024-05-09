@@ -120,7 +120,6 @@ func (tagger *Tagger) Tag(seqNumber uint64) error {
 }
 
 func (tagger *Tagger) UnTag(seqNumber uint64) error {
-	defer tagger.locker.Unlock(seqNumber)
 	return tagger.kv.Delete(context.TODO(), fmt.Sprintf("%d", seqNumber))
 }
 
@@ -183,6 +182,14 @@ func (tagger *Tagger) Sync(stream jetstream.Stream) error {
 			return err
 		}
 		err = tagger.conn.PublishMsgSch(newMsg)
+		if err != nil {
+			return err
+		}
+		err = tagger.UnTag(seqNumber)
+		if err != nil {
+			return err
+		}
+		err = tagger.locker.Unlock(seqNumber)
 		if err != nil {
 			return err
 		}
@@ -386,5 +393,6 @@ func main() {
 	// if err != nil {
 	// 	panic(err)
 	// }
+	fmt.Println("started")
 	fmt.Scanln()
 }
