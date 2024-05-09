@@ -73,7 +73,11 @@ func (locker *Locker) Lock(seqNumber uint64, consumerId string, consumers map[st
 	_, err := locker.kv.Create(context.TODO(), fmt.Sprintf("%d", seqNumber), []byte(consumerId))
 	if err != nil {
 		if errors.Is(err, jetstream.ErrKeyExists) {
-			_, ok := consumers[consumerId]
+			value, err := locker.kv.Get(context.TODO(), fmt.Sprintf("%d", seqNumber))
+			if err != nil {
+				return err
+			}
+			_, ok := consumers[string(value.Value())]
 			if ok {
 				return LOCK_IN_USE
 			}
@@ -110,21 +114,14 @@ func NewTagger(conn *Conn, queue string, consumerId string) (*Tagger, error) {
 	return &tagger, nil
 }
 
-func (tagger *Tagger) Tag(msg jetstream.Msg) error {
-	metadata, err := msg.Metadata()
-	if err != nil {
-		return err
-	}
-	_, err = tagger.kv.Put(context.TODO(), fmt.Sprintf("%d", metadata.Sequence.Stream), []byte(tagger.id))
+func (tagger *Tagger) Tag(seqNumber uint64) error {
+	_, err := tagger.kv.Put(context.TODO(), fmt.Sprintf("%d", seqNumber), []byte(tagger.id))
 	return err
 }
 
-func (tagger *Tagger) UnTag(msg jetstream.Msg) error {
-	metadata, err := msg.Metadata()
-	if err != nil {
-		return err
-	}
-	return tagger.kv.Delete(context.TODO(), fmt.Sprintf("%d", metadata.Sequence.Stream))
+func (tagger *Tagger) UnTag(seqNumber uint64) error {
+	defer tagger.locker.Unlock(seqNumber)
+	return tagger.kv.Delete(context.TODO(), fmt.Sprintf("%d", seqNumber))
 }
 
 func (tagger *Tagger) Sync(stream jetstream.Stream) error {
@@ -159,7 +156,10 @@ func (tagger *Tagger) Sync(stream jetstream.Stream) error {
 			err = tagger.locker.Lock(seqNumber, tagger.id, consumers)
 			if err != nil {
 				if errors.Is(err, LOCK_UNATTENDED) {
-					tagger.locker.Unlock(seqNumber)
+					err = tagger.locker.Unlock(seqNumber)
+					if err != nil {
+						return err
+					}
 					goto REPEAT
 				}
 				continue
@@ -170,23 +170,19 @@ func (tagger *Tagger) Sync(stream jetstream.Stream) error {
 		if ok {
 			continue
 		}
-		err = stream.DeleteMsg(context.TODO(), seqNumber)
+		msg, err := stream.GetMsg(context.TODO(), seqNumber)
 		if err != nil {
 			return err
 		}
-		msg, err := stream.GetMsg(context.TODO(), seqNumber)
+		err = stream.DeleteMsg(context.TODO(), seqNumber)
 		if err != nil {
-			return nil
+			return err
 		}
 		newMsg, err := WrapRawStreamingMessage(msg)
 		if err != nil {
 			return err
 		}
 		err = tagger.conn.PublishMsgSch(newMsg)
-		if err != nil {
-			return err
-		}
-		err = tagger.locker.Unlock(seqNumber)
 		if err != nil {
 			return err
 		}
@@ -228,12 +224,12 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 	}
 	consumer.Consume(func(msg jetstream.Msg) {
 		msg.Ack()
-		tagger.Tag(msg)
 		metadata, err := msg.Metadata()
 		if err != nil {
 			log.Println(err)
 			return
 		}
+		tagger.Tag(metadata.Sequence.Stream)
 		newMsg, err := WrapJetStreamMessage(msg)
 		if err != nil {
 			log.Println(err)
@@ -244,8 +240,9 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 			defer guard()
 			<-time.After(duration)
 			cb(newMsg)
-			tagger.UnTag(msg)
-			stream.DeleteMsg(context.TODO(), metadata.Sequence.Stream)
+			tagger.UnTag(metadata.Sequence.Stream)
+			err := stream.DeleteMsg(context.TODO(), metadata.Sequence.Stream)
+			_ = err
 		}()
 	})
 	return consumer, nil
@@ -385,9 +382,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	err = schConn.PublishSch("test", time.Now().Add(time.Second*1), []byte("OKK"))
-	if err != nil {
-		panic(err)
-	}
+	// err = schConn.PublishSch("test", time.Now().Add(time.Second*30), []byte("OKK"))
+	// if err != nil {
+	// 	panic(err)
+	// }
 	fmt.Scanln()
 }
