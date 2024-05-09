@@ -132,7 +132,7 @@ func (tagger *Tagger) Sync(stream jetstream.Stream) error {
 	return nil
 }
 
-func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg)) (jetstream.Consumer, error) {
+func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg)) (jetstream.ConsumeContext, error) {
 	stream, err := GetOrCreateStream(conn, subject)
 	if err != nil {
 		return nil, err
@@ -164,14 +164,20 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 			return nil, err
 		}
 	}
-	consumer.Consume(func(msg jetstream.Msg) {
-		msg.Ack()
+	consumeContext, err := consumer.Consume(func(msg jetstream.Msg) {
+		err := msg.Ack()
+		if err != nil {
+			log.Println(err)
+		}
 		metadata, err := msg.Metadata()
 		if err != nil {
 			log.Println(err)
 			return
 		}
-		tagger.Tag(metadata.Sequence.Stream)
+		err = tagger.Tag(metadata.Sequence.Stream)
+		if err != nil {
+			log.Println(err)
+		}
 		newMsg, err := WrapJetStreamMessage(msg)
 		if err != nil {
 			log.Println(err)
@@ -182,11 +188,20 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 			defer guard()
 			<-time.After(duration)
 			cb(newMsg)
-			tagger.UnTag(metadata.Sequence.Stream)
-			stream.DeleteMsg(context.TODO(), metadata.Sequence.Stream)
+			err := tagger.UnTag(metadata.Sequence.Stream)
+			if err != nil {
+				log.Println(err)
+			}
+			err = stream.DeleteMsg(context.TODO(), metadata.Sequence.Stream)
+			if err != nil {
+				log.Println(err)
+			}
 		}()
 	})
-	return consumer, nil
+	if err != nil {
+		log.Println(err)
+	}
+	return consumeContext, nil
 }
 
 func (conn *Conn) PublishSch(subject string, deadline time.Time, data []byte) error {
