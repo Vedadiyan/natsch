@@ -69,10 +69,6 @@ func NewLocker(conn *Conn, queue string) (*Locker, error) {
 	return &locker, nil
 }
 
-func (locker *Locker) ChangeOwnerShip(seqNumber uint64, consumerId string) error {
-	panic("")
-}
-
 func (locker *Locker) Lock(seqNumber uint64, consumerId string, consumers map[string]bool) error {
 	_, err := locker.kv.Create(context.TODO(), fmt.Sprintf("%d", seqNumber), []byte(consumerId))
 	if err != nil {
@@ -154,16 +150,14 @@ func (tagger *Tagger) Sync(stream jetstream.Stream) error {
 		if err != nil {
 			return err
 		}
+	REPEAT:
 		err = tagger.locker.Lock(seqNumber, tagger.id, consumers)
 		if err != nil {
 			if errors.Is(err, LOCK_UNATTENDED) {
-				err = tagger.locker.ChangeOwnerShip(seqNumber, tagger.id)
-				if err != nil {
-					continue
-				}
-			} else {
-				continue
+				tagger.locker.Unlock(seqNumber)
+				goto REPEAT
 			}
+			continue
 		}
 		_, ok := consumers[string(value.Value())]
 		if ok {
