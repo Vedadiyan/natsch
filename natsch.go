@@ -183,8 +183,7 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 			<-time.After(duration)
 			cb(newMsg)
 			tagger.UnTag(metadata.Sequence.Stream)
-			err := stream.DeleteMsg(context.TODO(), metadata.Sequence.Stream)
-			_ = err
+			stream.DeleteMsg(context.TODO(), metadata.Sequence.Stream)
 		}()
 	})
 	return consumer, nil
