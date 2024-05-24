@@ -262,7 +262,7 @@ func GetOrCreateStream(conn *Conn, subject string) (jetstream.Stream, error) {
 	conn.streamsRwMut.RUnlock()
 	if !ok {
 		cfg := jetstream.StreamConfig{
-			Name:     strings.ToUpper(subject),
+			Name:     strings.ToUpper(strings.ReplaceAll(subject, ".", "")),
 			Subjects: []string{subject},
 			FirstSeq: 1,
 		}
