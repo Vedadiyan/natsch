@@ -189,6 +189,7 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 		if err != nil {
 			log.Println("ack:", err)
 		}
+		log.Println("new message")
 		metadata, err := msg.Metadata()
 		if err != nil {
 			log.Println("metadata:", err)
@@ -204,9 +205,12 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 			return
 		}
 		duration := time.Until(time.UnixMicro(newMsg.Deadline))
+		log.Println("new message deadline", duration)
 		go func() {
+			log.Println("new message being handled")
 			defer guard()
 			<-time.After(duration)
+			log.Println("new message handled")
 			cb(newMsg)
 			err = stream.DeleteMsg(context.TODO(), metadata.Sequence.Stream)
 			if err != nil {
