@@ -299,10 +299,8 @@ func WrapRawStreamingMessage(rawStreamingMsg *jetstream.RawStreamMsg) (*Msg, err
 	msg.Subject = rawStreamingMsg.Subject
 	msg.Header = rawStreamingMsg.Header
 	msg.Data = rawStreamingMsg.Data
-	deadline := rawStreamingMsg.Header.Get(HEADER_DEADLINE)
-	if deadline == "" {
-		return nil, ERR_MESSAGE_DEADLINE_NOT_FOUND
-	}
+	deadline := "0"
+	deadline = rawStreamingMsg.Header.Get(HEADER_DEADLINE)
 	deadlineInt64, err := strconv.ParseInt(deadline, 10, 64)
 	if err != nil {
 		return nil, err
