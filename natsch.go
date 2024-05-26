@@ -317,10 +317,8 @@ func WrapJetStreamMessage(natsMsg jetstream.Msg) (*Msg, error) {
 	msg.Header = natsMsg.Headers()
 	msg.Reply = natsMsg.Reply()
 	msg.Data = natsMsg.Data()
-	deadline := natsMsg.Headers().Get(HEADER_DEADLINE)
-	if deadline == "" {
-		return nil, ERR_MESSAGE_DEADLINE_NOT_FOUND
-	}
+	deadline := "0"
+	deadline = natsMsg.Headers().Get(HEADER_DEADLINE)
 	deadlineInt64, err := strconv.ParseInt(deadline, 10, 64)
 	if err != nil {
 		return nil, err
