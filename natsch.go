@@ -185,41 +185,43 @@ func (conn *Conn) QueueSubscribeSch(subject string, queue string, cb func(*Msg))
 		msg.Respond(nil)
 	})
 	consumerContext, err := consumer.Consume(func(msg jetstream.Msg) {
-		err := msg.Ack()
-		if err != nil {
-			log.Println("ack:", err)
-		}
-		log.Println("new message")
-		metadata, err := msg.Metadata()
-		if err != nil {
-			log.Println("metadata:", err)
-			return
-		}
-		err = tagger.Tag(metadata.Sequence.Stream)
-		if err != nil {
-			log.Println("tag:", err)
-		}
-		newMsg, err := WrapJetStreamMessage(msg)
-		if err != nil {
-			log.Println("message wrap:", err)
-			return
-		}
-		duration := time.Until(time.UnixMicro(newMsg.Deadline))
-		log.Println("new message deadline", duration)
 		go func() {
-			log.Println("new message being handled")
-			defer guard()
-			<-time.After(duration)
-			log.Println("new message handled")
-			cb(newMsg)
-			err = stream.DeleteMsg(context.TODO(), metadata.Sequence.Stream)
+			err := msg.Ack()
 			if err != nil {
-				log.Println("delete key:", err)
+				log.Println("ack:", err)
 			}
-			err := tagger.UnTag(metadata.Sequence.Stream)
+			log.Println("new message")
+			metadata, err := msg.Metadata()
 			if err != nil {
-				log.Println("untag:", err)
+				log.Println("metadata:", err)
+				return
 			}
+			err = tagger.Tag(metadata.Sequence.Stream)
+			if err != nil {
+				log.Println("tag:", err)
+			}
+			newMsg, err := WrapJetStreamMessage(msg)
+			if err != nil {
+				log.Println("message wrap:", err)
+				return
+			}
+			duration := time.Until(time.UnixMicro(newMsg.Deadline))
+			log.Println("new message deadline", duration)
+			go func() {
+				log.Println("new message being handled")
+				defer guard()
+				<-time.After(duration)
+				log.Println("new message handled")
+				cb(newMsg)
+				err = stream.DeleteMsg(context.TODO(), metadata.Sequence.Stream)
+				if err != nil {
+					log.Println("delete key:", err)
+				}
+				err := tagger.UnTag(metadata.Sequence.Stream)
+				if err != nil {
+					log.Println("untag:", err)
+				}
+			}()
 		}()
 	})
 	if err != nil {
